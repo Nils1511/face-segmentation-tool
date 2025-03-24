@@ -403,7 +403,7 @@ def main():
         return
     print("Starting application...")
     interface = create_interface()
-    port = int(os.environ.get("PORT", 7860))
+    port = int(os.environ.get("PORT", 7860)) # Use the port Render provides
     print(f"Starting Gradio server on port {port}")
     interface.queue().launch(
         server_name="0.0.0.0",
