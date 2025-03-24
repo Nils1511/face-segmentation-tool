@@ -650,39 +650,30 @@ def main():
         print("Failed to set up environment. Exiting.")
         return
     
-     # Add debug output before anything else
-    print("Starting application...")
+     print("Starting application...")
     
-    # Create and launch Gradio interface
-    print("Creating Gradio interface...")
+    # Create Gradio interface
     interface = create_interface()
     
     # Get the PORT from environment variables, with a fallback to 7860
     port = int(os.environ.get("PORT", 7860))
     
-    # Print debug information
     print(f"Starting Gradio server on port {port}")
-    print(f"Environment variables: {dict(os.environ)}")  # Add this line to see all env vars
     
-    try:
-        # Launch with explicit visibility and port settings for Render deployment
-        interface.launch(
-            server_name="0.0.0.0",  # Listen on all network interfaces
-            server_port=port,       # Use the PORT env var from Render
-            share=False,            # Don't create a temporary share link
-            debug=True,             # Enable debug output
-            enable_queue=True,      # Enable request queue for better handling
-            show_error=True,        # Show detailed error messages
-            show_tips=False,        # Don't show tips
-            inbrowser=False,        # Don't open browser automatically
-            favicon_path=None       # No custom favicon
-        )
-        
-        # Print confirmation that the server has started
-        print(f"Gradio server started on port {port}")
-    except Exception as e:
-        print(f"Error starting Gradio server: {e}")
-        import traceback
-        traceback.print_exc()
+    # IMPORTANT: Use the non-blocking method to start the server
+    # This is the key change
+    interface.queue().launch(
+        server_name="0.0.0.0",
+        server_port=port,
+        share=False,
+        prevent_thread_lock=True  # Critical for Render - makes launch() non-blocking
+    )
+    
+    print(f"Gradio server started successfully on port {port}")
+    
+    # Keep the process alive
+    import time
+    while True:
+        time.sleep(600) 
 if __name__ == "__main__":
     main()
