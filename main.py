@@ -444,24 +444,3 @@ def main():
         time.sleep(600)
 if __name__ == "__main__":
     main()
-    try:
-        print(f"Starting Gradio server on {host}:{port}")
-        interface.queue().launch(
-            server_name=host,
-            server_port=port,
-            share=False,
-            prevent_thread_lock=True
-        )
-        print(f"Gradio server started successfully on {host}:{port}")
-    except Exception as e:
-        print(f"Error starting server: {e}")
-        import traceback
-        traceback.print_exc()
-        print(f"Failed to start server on {host}:{port}.  Check the error message and ensure the port is available.")
-        return
-    import time
-    while True:
-        time.sleep(600)
-
-if __name__ == "__main__":
-    main()
