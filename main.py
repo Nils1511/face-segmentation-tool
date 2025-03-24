@@ -14,6 +14,7 @@ from skimage.measure import find_contours
 from skimage.draw import polygon
 import tempfile
 import gc
+import socket
 
 # Install required packages if not already installed
 def setup_environment():
@@ -334,25 +335,25 @@ def resize_if_large(image, max_size=1024):
         print(f"Error resizing image: {e}")
         return image
 
-def download_processed_image(image):
-    if image is None:
-        return None
-    image_copy = image.copy()
-    if len(image_copy.shape) == 3 and image_copy.shape[2] == 3:
-        image_rgba = cv2.cvtColor(image_copy, cv2.COLOR_RGB2RGBA)
-        white_mask = np.all(image_copy == 255, axis=2)
-        image_rgba[white_mask, 3] = 0
-    else:
-        image_rgba = image_copy
-    if image_rgba.shape[2] == 4:
-        if image_rgba[:,:,3].max() <= 1:
-            image_rgba[:,:,3] = image_rgba[:,:,3] * 255
-    pil_image = Image.fromarray(image_rgba.astype(np.uint8), 'RGBA')
-    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
-    file_path = temp_file.name
-    pil_image.save(file_path, format='PNG')
-    temp_file.close()
-    return file_path
+# def download_processed_image(image):
+#     if image is None:
+#         return None
+#     image_copy = image.copy()
+#     if len(image_copy.shape) == 3 and image_copy.shape[2] == 3:
+#         image_rgba = cv2.cvtColor(image_copy, cv2.COLOR_RGB2RGBA)
+#         white_mask = np.all(image_copy == 255, axis=2)
+#         image_rgba[white_mask, 3] = 0
+#     else:
+#         image_rgba = image_copy
+#     if image_rgba.shape[2] == 4:
+#         if image_rgba[:,:,3].max() <= 1:
+#             image_rgba[:,:,3] = image_rgba[:,:,3] * 255
+#     pil_image = Image.fromarray(image_rgba.astype(np.uint8), 'RGBA')
+#     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+#     file_path = temp_file.name
+#     pil_image.save(file_path, format='PNG')
+#     temp_file.close()
+#     return file_path
     
 def create_interface():
     with gr.Blocks(title="Face Segmentation Tool") as interface:
@@ -397,21 +398,67 @@ def create_interface():
         """)
     return interface
 
+# Main function
 def main():
+    # Set up the environment
     if not setup_environment():
         print("Failed to set up environment. Exiting.")
         return
+    
     print("Starting application...")
+    
+    # Create Gradio interface
     interface = create_interface()
-    port = int(os.environ.get("PORT", 7860)) # Use the port Render provides
-    print(f"Starting Gradio server on port {port}")
+    
+    # Get the PORT from environment variables, with a fallback to 7860
+    port = int(os.environ.get("PORT", 7860))
+    host = "0.0.0.0" # Listen on all interfaces
+    
+    # Check if the port is already in use
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind((host, port))
+    except socket.error as e:
+        print(f"Error: Port {port} is already in use.  Please check if another application is using this port, or try setting the PORT environment variable to a different value.  Error Details: {e}")
+        sock.close()
+        return
+    finally:
+        sock.close()
+    
+    print(f"Starting Gradio server on {host}:{port}")
+    
+    # IMPORTANT: Use the non-blocking method to start the server
+    # This is the key change
     interface.queue().launch(
-        server_name="0.0.0.0",
+        server_name=host,
         server_port=port,
         share=False,
-        prevent_thread_lock=True
+        prevent_thread_lock=True  # Critical for Render - makes launch() non-blocking
     )
-    print(f"Gradio server started successfully on port {port}")
+    
+    print(f"Gradio server started successfully on {host}:{port}")
+    
+    # Keep the process alive
+    import time
+    while True:
+        time.sleep(600)
+if __name__ == "__main__":
+    main()
+    try:
+        print(f"Starting Gradio server on {host}:{port}")
+        interface.queue().launch(
+            server_name=host,
+            server_port=port,
+            share=False,
+            prevent_thread_lock=True
+        )
+        print(f"Gradio server started successfully on {host}:{port}")
+    except Exception as e:
+        print(f"Error starting server: {e}")
+        import traceback
+        traceback.print_exc()
+        print(f"Failed to start server on {host}:{port}.  Check the error message and ensure the port is available.")
+        return
     import time
     while True:
         time.sleep(600)
