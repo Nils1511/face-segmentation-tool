@@ -650,7 +650,7 @@ def main():
         print("Failed to set up environment. Exiting.")
         return
     
-     print("Starting application...")
+    print("Starting application...")
     
     # Create Gradio interface
     interface = create_interface()
