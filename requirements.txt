@@ -11,4 +11,4 @@ onnxruntime
 numba 
 llvmlite 
 streamlit
-dlib
+dlib-bin
