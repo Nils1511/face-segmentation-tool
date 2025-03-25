@@ -1,6 +1,0 @@
-build-essential
-cmake
-libx11-dev
-libgtk-3-dev
-libatlas-base-dev
-libopenblas-dev
