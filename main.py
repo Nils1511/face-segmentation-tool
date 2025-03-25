@@ -55,83 +55,83 @@ def load_bisenet_model():
         st.error(f"Error loading BiSeNet model: {e}")
         return None
 
-# def verify_single_face(image):
-#     try:
-#         if image is None:
-#             return False, "No image provided", None
-            
-#         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
-            
-#         face_cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-#         face_cascade = cv2.CascadeClassifier(face_cascade_path)
-        
-#         faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
-        
-#         num_faces = len(faces)
-        
-#         if num_faces == 0:
-#             return False, "No faces detected in the image.", None
-#         elif num_faces > 1:
-#             return False, f"{num_faces} faces detected.", None
-#         else:
-#             return True, "One face detected.", faces[0]
-            
-#     except Exception as e:
-#         st.error(f"Error during face verification: {e}")
-#         return False, f"Error during face detection: {str(e)}", None
-
-
 def verify_single_face(image):
-    """
-    Verify that the image contains exactly one face using Dlib's HOG + Linear SVM
-    face detection.
-
-    Args:
-        image (numpy.ndarray): Input image to check for faces.
-
-    Returns:
-        tuple: (is_valid, message, face_rect)
-            - is_valid (bool): Whether exactly one face is detected
-            - message (str): Descriptive message about face detection
-            - face_rect (tuple or None): Coordinates of the detected face
-              (x, y, width, height) or None
-    """
     try:
         if image is None:
             return False, "No image provided", None
-
-        # Initialize dlib's face detector using the default HOG + SVM model
-        detector = dlib.get_frontal_face_detector()
-
-        # Convert the image to grayscale, as HOG works on grayscale images
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-        # Detect faces in the grayscale image
-        # The '1' here is the upsample factor.  Larger values (e.g., 2, 3, or 4) can
-        # help detect smaller faces but increase computation time.  You can
-        # experiment with this value.
-        faces = detector(gray, 1)
-
+            
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+            
+        face_cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+        face_cascade = cv2.CascadeClassifier(face_cascade_path)
+        
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+        
         num_faces = len(faces)
-
+        
         if num_faces == 0:
             return False, "No faces detected in the image.", None
         elif num_faces > 1:
             return False, f"{num_faces} faces detected.", None
-
-        # Get the first (and only) face
-        face = faces[0]
-        # Convert the dlib rectangle to a (x, y, width, height) tuple
-        x = face.left()
-        y = face.top()
-        width = face.right() - x
-        height = face.bottom() - y
-        face_rect = (x, y, width, height)
-
-        return True, "One face detected.", face_rect
-
+        else:
+            return True, "One face detected.", faces[0]
+            
     except Exception as e:
+        st.error(f"Error during face verification: {e}")
         return False, f"Error during face detection: {str(e)}", None
+
+
+# def verify_single_face(image):
+#     """
+#     Verify that the image contains exactly one face using Dlib's HOG + Linear SVM
+#     face detection.
+
+#     Args:
+#         image (numpy.ndarray): Input image to check for faces.
+
+#     Returns:
+#         tuple: (is_valid, message, face_rect)
+#             - is_valid (bool): Whether exactly one face is detected
+#             - message (str): Descriptive message about face detection
+#             - face_rect (tuple or None): Coordinates of the detected face
+#               (x, y, width, height) or None
+#     """
+#     try:
+#         if image is None:
+#             return False, "No image provided", None
+
+#         # Initialize dlib's face detector using the default HOG + SVM model
+#         detector = dlib.get_frontal_face_detector()
+
+#         # Convert the image to grayscale, as HOG works on grayscale images
+#         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+#         # Detect faces in the grayscale image
+#         # The '1' here is the upsample factor.  Larger values (e.g., 2, 3, or 4) can
+#         # help detect smaller faces but increase computation time.  You can
+#         # experiment with this value.
+#         faces = detector(gray, 1)
+
+#         num_faces = len(faces)
+
+#         if num_faces == 0:
+#             return False, "No faces detected in the image.", None
+#         elif num_faces > 1:
+#             return False, f"{num_faces} faces detected.", None
+
+#         # Get the first (and only) face
+#         face = faces[0]
+#         # Convert the dlib rectangle to a (x, y, width, height) tuple
+#         x = face.left()
+#         y = face.top()
+#         width = face.right() - x
+#         height = face.bottom() - y
+#         face_rect = (x, y, width, height)
+
+#         return True, "One face detected.", face_rect
+
+#     except Exception as e:
+#         return False, f"Error during face detection: {str(e)}", None
 
 def remove_background(input_image):
     try:
