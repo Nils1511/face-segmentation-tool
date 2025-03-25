@@ -5,39 +5,38 @@ import numpy as np
 import torch
 import torchvision.transforms as transforms
 from PIL import Image
-import gradio as gr
+import streamlit as st
 from rembg import remove
 import subprocess
 import gdown
 from scipy.ndimage import gaussian_filter
 from skimage.measure import find_contours
 from skimage.draw import polygon
-import tempfile
 import gc
-import socket
 
 # Install required packages if not already installed
 def setup_environment():
     try:
         if not os.path.exists('face-parsing.PyTorch'):
-            print("Cloning BiSeNet repository...")
+            st.info("Cloning BiSeNet repository...")
             subprocess.run(['git', 'clone', 'https://github.com/zllrunning/face-parsing.PyTorch.git'], check=True)
         
         model_path = 'face-parsing.PyTorch/res/cp/79999_iter.pth'
         if not os.path.exists(model_path):
-            print("Downloading pre-trained model...")
+            st.info("Downloading pre-trained model...")
             os.makedirs(os.path.dirname(model_path), exist_ok=True)
             gdown.download('https://drive.google.com/uc?id=154JgKpzCPW82qINcVieuPH3fZ2e0P812', model_path, quiet=False)
         
         sys.path.append('face-parsing.PyTorch')
         
-        print("Environment setup completed successfully.")
+        st.success("Environment setup completed successfully.")
         return True
     except Exception as e:
-        print(f"Error setting up environment: {e}")
+        st.error(f"Error setting up environment: {e}")
         return False
 
 # Load the BiSeNet model
+@st.cache_resource
 def load_bisenet_model():
     from model import BiSeNet
     
@@ -52,7 +51,7 @@ def load_bisenet_model():
 
         return model
     except Exception as e:
-        print(f"Error loading BiSeNet model: {e}")
+        st.error(f"Error loading BiSeNet model: {e}")
         return None
 
 def verify_single_face(image):
@@ -77,7 +76,7 @@ def verify_single_face(image):
             return True, "One face detected.", faces[0]
             
     except Exception as e:
-        print(f"Error during face verification: {e}")
+        st.error(f"Error during face verification: {e}")
         return False, f"Error during face detection: {str(e)}", None
 
 def remove_background(input_image):
@@ -93,7 +92,7 @@ def remove_background(input_image):
         output_array[:, :, 3] = alpha
         return output_array
     except Exception as e:
-        print(f"Error removing background: {e}")
+        st.error(f"Error removing background: {e}")
         return None
 
 def enhance_edges(image, low_threshold=50, high_threshold=150):
@@ -106,7 +105,7 @@ def enhance_edges(image, low_threshold=50, high_threshold=150):
         dilated_edges = cv2.dilate(edges, kernel, iterations=1)
         return dilated_edges
     except Exception as e:
-        print(f"Error enhancing edges: {e}")
+        st.error(f"Error enhancing edges: {e}")
         return None
 
 def refine_mask(mask, original_image=None):
@@ -154,11 +153,11 @@ def refine_mask(mask, original_image=None):
                 final_mask = (final_mask > 127).astype(np.uint8) * 255
                 return final_mask
             except Exception as e:
-                print(f"GrabCut refinement failed: {e}")
+                st.error(f"GrabCut refinement failed: {e}")
                 return refined_mask
         return refined_mask
     except Exception as e:
-        print(f"Error in mask refinement: {e}")
+        st.error(f"Error in mask refinement: {e}")
         return mask
 
 def segment_face(input_array, model):
@@ -243,80 +242,10 @@ def segment_face(input_array, model):
             result = result_rgba
         return {'face_mask': face_mask, 'combined_mask': smoothed_mask, 'segmented_image': result}
     except Exception as e:
-        print(f"Error in face segmentation: {e}")
+        st.error(f"Error in face segmentation: {e}")
         import traceback
         traceback.print_exc()
         return None
-
-def process_image(input_image, remove_bg=True, segment_face_only=True):
-    try:
-        if input_image is None or not isinstance(input_image, np.ndarray):
-            return None, None, None, "No valid image provided. Please upload an image."
-        input_array = input_image.copy()
-        input_array = np.array(input_array)
-        is_valid, message, face_rect = verify_single_face(input_array)
-        if not is_valid:
-            return None, None, None, message
-        input_array = resize_if_large(input_array)
-        if len(input_array.shape) == 2:
-            input_array = cv2.cvtColor(input_array, cv2.COLOR_GRAY2RGB)
-        elif input_array.shape[2] == 4:
-            input_array = cv2.cvtColor(input_array, cv2.COLOR_RGBA2RGB)
-
-        bg_removed = None
-        segmented_rgb = None
-        mask_rgb = None
-
-        if remove_bg:
-            bg_removed = remove_background(input_array)
-            bg_removed = cv2.cvtColor(bg_removed, cv2.COLOR_BGRA2RGBA)
-            if bg_removed is None:
-                print("Error: Background removal failed.")
-                return None, None, None, "Background removal failed. Please try a different image."
-        else:
-            if input_array.shape[2] == 3:
-                bg_removed = cv2.cvtColor(input_array, cv2.COLOR_RGB2RGBA)
-                bg_removed[:, :, 3] = 255
-            else:
-                bg_removed = input_array
-
-        if segment_face_only:
-            if not hasattr(process_image, 'model'):
-                process_image.model = load_bisenet_model()
-            if process_image.model is None:
-                print("Error: BiSeNet model not loaded")
-                return None, None, None, "Face segmentation model failed to load."
-            results = segment_face(bg_removed, process_image.model)
-            if results:
-                mask_rgb = cv2.cvtColor(results['combined_mask'], cv2.COLOR_GRAY2RGB)
-                segmented_rgba = results['segmented_image']
-                h, w = segmented_rgba.shape[:2]
-                bg = np.ones((h, w, 3), dtype=np.uint8) * 255
-                alpha = segmented_rgba[:, :, 3:4] / 255.0
-                rgb = segmented_rgba[:, :, :3]
-                segmented_rgb = (rgb * alpha + bg * (1 - alpha)).astype(np.uint8)
-                del results, segmented_rgba, alpha, rgb, bg
-                torch.cuda.empty_cache()
-                gc.collect()
-                
-                return segmented_rgb, bg_removed, mask_rgb, "Processing completed successfully."
-            else:
-                return None, None, None, "Face segmentation failed. Please try a different image."
-        else:
-            h, w = bg_removed.shape[:2]
-            bg = np.ones((h, w, 3), dtype=np.uint8) * 255
-            alpha = bg_removed[:, :, 3:4] / 255.0
-            rgb = bg_removed[:, :, :3]
-            bg_removed_rgb = (rgb * alpha + bg * (1 - alpha)).astype(np.uint8)
-            del alpha, rgb, bg
-            torch.cuda.empty_cache()
-            gc.collect()
-            return None, bg_removed_rgb, None, "Background removal completed successfully."
-    except Exception as e:
-        print(f"Error processing image: {e}")
-        import traceback
-        traceback.print_exc()
-        return None, None, None, f"Error processing image: {str(e)}"
 
 def resize_if_large(image, max_size=1024):
     try:
@@ -332,115 +261,154 @@ def resize_if_large(image, max_size=1024):
             return resized_image
         return image
     except Exception as e:
-        print(f"Error resizing image: {e}")
+        st.error(f"Error resizing image: {e}")
         return image
 
-# def download_processed_image(image):
-#     if image is None:
-#         return None
-#     image_copy = image.copy()
-#     if len(image_copy.shape) == 3 and image_copy.shape[2] == 3:
-#         image_rgba = cv2.cvtColor(image_copy, cv2.COLOR_RGB2RGBA)
-#         white_mask = np.all(image_copy == 255, axis=2)
-#         image_rgba[white_mask, 3] = 0
-#     else:
-#         image_rgba = image_copy
-#     if image_rgba.shape[2] == 4:
-#         if image_rgba[:,:,3].max() <= 1:
-#             image_rgba[:,:,3] = image_rgba[:,:,3] * 255
-#     pil_image = Image.fromarray(image_rgba.astype(np.uint8), 'RGBA')
-#     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
-#     file_path = temp_file.name
-#     pil_image.save(file_path, format='PNG')
-#     temp_file.close()
-#     return file_path
-    
-def create_interface():
-    with gr.Blocks(title="Face Segmentation Tool") as interface:
-        gr.Markdown("# Face Segmentation")
-        gr.Markdown("Upload an image to remove the background and/or segment the face.")
-        gr.Markdown("**Important:** The image must contain exactly one human face.")
-        
-        with gr.Row():
-            with gr.Column():
-                input_image = gr.Image(label="Input Image", type="numpy")
-                
-                with gr.Row():
-                    remove_bg = gr.Checkbox(label="Remove Background", value=True)
-                    segment_face_only = gr.Checkbox(label="Segment Face Only", value=True)
-                
-                process_btn = gr.Button("Process Image")
-                status_msg = gr.Textbox(label="Status", value="")
-            
-            with gr.Column():
-                with gr.Tab("Segmented Face"):
-                    segmented_face_image = gr.Image(label="Segmented Face", type="numpy",interactive=False, show_download_button=True)
-                with gr.Tab("Background Removed"):
-                    bg_removed_image = gr.Image(label="Background Removed", type="numpy", interactive=False, show_download_button=True)
-                with gr.Tab("Face Mask"):
-                    face_mask_image = gr.Image(label="Face Mask", type="numpy", interactive=False, show_download_button=True)
-        
-        process_btn.click(
-            fn=process_image,
-            inputs=[input_image, remove_bg, segment_face_only],
-            outputs=[segmented_face_image, bg_removed_image, face_mask_image, status_msg]
-        )
-        
-        gr.Markdown("## How it works")
-        gr.Markdown("""
-        1. **Face Verification**: Confirms the image contains exactly one human face.
-        2. **Background Removal**: Uses the rembg library to remove the background from the uploaded image.
-        3. **Face Segmentation**: Uses the BiSeNet model to segment facial features including skin, eyes, eyebrows, nose, mouth, and hair.
-        4. **Advanced Edge Refinement**: Uses contour extraction, GrabCut, and polynomial approximation to create smooth edges.
-        5. **Mask Cleanup**: Applies morphological operations and connected component analysis to refine the segmentation.
-        
-        Note: Processing may take a few moments depending on the image size and complexity.
-        """)
-    return interface
-
-# Main function
-def main():
-    # Set up the environment
-    if not setup_environment():
-        print("Failed to set up environment. Exiting.")
-        return
-    
-    print("Starting application...")
-    
-    # Create Gradio interface
-    interface = create_interface()
-    
-    # Get the PORT from environment variables, with a fallback to 7860
-    port = int(os.environ.get("PORT", 7860))
-    host = "0.0.0.0" # Listen on all interfaces
-    
-    # Check if the port is already in use
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+def process_image(input_image, remove_bg=True, segment_face_only=True):
     try:
-        sock.bind((host, port))
-    except socket.error as e:
-        print(f"Error: Port {port} is already in use.  Please check if another application is using this port, or try setting the PORT environment variable to a different value.  Error Details: {e}")
-        sock.close()
-        return
-    finally:
-        sock.close()
+        if input_image is None or not isinstance(input_image, np.ndarray):
+            st.error("No valid image provided. Please upload an image.")
+            return None, None, None
+
+        input_array = input_image.copy()
+        input_array = np.array(input_array)
+        is_valid, message, face_rect = verify_single_face(input_array)
+        if not is_valid:
+            st.error(message)
+            return None, None, None
+
+        input_array = resize_if_large(input_array)
+        if len(input_array.shape) == 2:
+            input_array = cv2.cvtColor(input_array, cv2.COLOR_GRAY2RGB)
+        elif input_array.shape[2] == 4:
+            input_array = cv2.cvtColor(input_array, cv2.COLOR_RGBA2RGB)
+
+        bg_removed = None
+        segmented_rgb = None
+        mask_rgb = None
+
+        if remove_bg:
+            bg_removed = remove_background(input_array)
+            bg_removed = cv2.cvtColor(bg_removed, cv2.COLOR_BGRA2RGBA)
+            if bg_removed is None:
+                st.error("Background removal failed. Please try a different image.")
+                return None, None, None
+        else:
+            if input_array.shape[2] == 3:
+                bg_removed = cv2.cvtColor(input_array, cv2.COLOR_RGB2RGBA)
+                bg_removed[:, :, 3] = 255
+            else:
+                bg_removed = input_array
+
+        if segment_face_only:
+            model = load_bisenet_model()
+            if model is None:
+                st.error("Face segmentation model failed to load.")
+                return None, None, None
+
+            results = segment_face(bg_removed, model)
+            if results:
+                mask_rgb = cv2.cvtColor(results['combined_mask'], cv2.COLOR_GRAY2RGB)
+                segmented_rgba = results['segmented_image']
+                h, w = segmented_rgba.shape[:2]
+                bg = np.ones((h, w, 3), dtype=np.uint8) * 255
+                alpha = segmented_rgba[:, :, 3:4] / 255.0
+                rgb = segmented_rgba[:, :, :3]
+                segmented_rgb = (rgb * alpha + bg * (1 - alpha)).astype(np.uint8)
+                del results, segmented_rgba, alpha, rgb, bg
+                torch.cuda.empty_cache()
+                gc.collect()
+                
+                return segmented_rgb, bg_removed, mask_rgb
+            else:
+                st.error("Face segmentation failed. Please try a different image.")
+                return None, None, None
+        else:
+            h, w = bg_removed.shape[:2]
+            bg = np.ones((h, w, 3), dtype=np.uint8) * 255
+            alpha = bg_removed[:, :, 3:4] / 255.0
+            rgb = bg_removed[:, :, :3]
+            bg_removed_rgb = (rgb * alpha + bg * (1 - alpha)).astype(np.uint8)
+            del alpha, rgb, bg
+            torch.cuda.empty_cache()
+            gc.collect()
+            return None, bg_removed_rgb, None
+
+    except Exception as e:
+        st.error(f"Error processing image: {e}")
+        import traceback
+        traceback.print_exc()
+        return None, None, None
+
+def main():
+    # Set page config
+    st.set_page_config(page_title="Face Segmentation Tool", page_icon=":camera:", layout="wide")
     
-    print(f"Starting Gradio server on {host}:{port}")
+    # Title and description
+    st.title("🖼️ Face Segmentation Tool")
+    st.markdown("Upload an image to remove the background and/or segment the face.")
+    st.markdown("**Important:** The image must contain exactly one human face.")
     
-    # IMPORTANT: Use the non-blocking method to start the server
-    # This is the key change
-    interface.queue().launch(
-        server_name=host,
-        server_port=port,
-        share=False,
-        prevent_thread_lock=True  # Critical for Render - makes launch() non-blocking
-    )
+    # Setup environment and download model
+    setup_environment()
     
-    print(f"Gradio server started successfully on {host}:{port}")
+    # Sidebar for options
+    st.sidebar.header("Processing Options")
+    remove_bg = st.sidebar.checkbox("Remove Background", value=True)
+    segment_face_only = st.sidebar.checkbox("Segment Face Only", value=True)
     
-    # Keep the process alive
-    import time
-    while True:
-        time.sleep(600)
+    # Image upload
+    uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
+    
+    # Process button
+    if uploaded_file is not None:
+        # Read the image
+        file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
+        input_image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+        
+        # Process the image
+        st.subheader("Results")
+        
+        # Create columns for results
+        col1, col2, col3 = st.columns(3)
+        
+        # Process and display results
+        with st.spinner('Processing image...'):
+            segmented_face, bg_removed, face_mask = process_image(input_image, remove_bg, segment_face_only)
+        
+        # Display results in columns
+        with col1:
+            st.markdown("**Segmented Face**")
+            if segmented_face is not None:
+                st.image(segmented_face, use_column_width=True)
+            else:
+                st.write("No segmented face available")
+        
+        with col2:
+            st.markdown("**Background Removed**")
+            if bg_removed is not None:
+                st.image(bg_removed, use_column_width=True)
+            else:
+                st.write("No background removed image available")
+        
+        with col3:
+            st.markdown("**Face Mask**")
+            if face_mask is not None:
+                st.image(face_mask, use_column_width=True)
+            else:
+                st.write("No face mask available")
+    
+    # How it works section
+    st.markdown("## How it works")
+    st.markdown("""
+    1. **Face Verification**: Confirms the image contains exactly one human face.
+    2. **Background Removal**: Uses the rembg library to remove the background from the uploaded image.
+    3. **Face Segmentation**: Uses the BiSeNet model to segment facial features including skin, eyes, eyebrows, nose, mouth, and hair.
+    4. **Advanced Edge Refinement**: Uses contour extraction, GrabCut, and polynomial approximation to create smooth edges.
+    5. **Mask Cleanup**: Applies morphological operations and connected component analysis to refine the segmentation.
+    
+    Note: Processing may take a few moments depending on the image size and complexity.
+    """)
+
 if __name__ == "__main__":
     main()
