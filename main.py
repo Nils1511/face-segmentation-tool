@@ -381,21 +381,22 @@ def main():
         with col1:
             st.markdown("**Segmented Face**")
             if segmented_face is not None:
-                st.image(segmented_face, use_column_width=True)
+                st.image(segmented_face, use_container_width=True)
             else:
                 st.write("No segmented face available")
+                
         
         with col2:
             st.markdown("**Background Removed**")
             if bg_removed is not None:
-                st.image(bg_removed, use_column_width=True)
+                st.image(bg_removed, use_container_width=True)
             else:
                 st.write("No background removed image available")
         
         with col3:
             st.markdown("**Face Mask**")
             if face_mask is not None:
-                st.image(face_mask, use_column_width=True)
+                st.image(face_mask, use_container_width=True)
             else:
                 st.write("No face mask available")
     
