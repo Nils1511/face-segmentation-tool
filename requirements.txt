@@ -1,7 +1,6 @@
 torch
 torchvision 
 opencv-python
-opencv-python-headless 
 pillow 
 rembg
 gdown
