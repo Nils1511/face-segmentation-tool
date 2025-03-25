@@ -13,6 +13,7 @@ from scipy.ndimage import gaussian_filter
 from skimage.measure import find_contours
 from skimage.draw import polygon
 import gc
+import dlib
 
 # Install required packages if not already installed
 def setup_environment():
