@@ -280,7 +280,7 @@ def verify_single_face(image):
                 is_duplicate = False
                 for existing in unique_faces:
                     overlap = compute_iou(face, existing)
-                    if overlap > 0.6:  # 30% overlap threshold
+                    if overlap > 0.05:  # 30% overlap threshold
                         is_duplicate = True
                         break
                 
