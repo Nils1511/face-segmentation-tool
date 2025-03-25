@@ -54,30 +54,151 @@ def load_bisenet_model():
         st.error(f"Error loading BiSeNet model: {e}")
         return None
 
+# def verify_single_face(image):
+#     try:
+#         if image is None:
+#             return False, "No image provided", None
+            
+#         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+            
+#         face_cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+#         face_cascade = cv2.CascadeClassifier(face_cascade_path)
+        
+#         faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+        
+#         num_faces = len(faces)
+        
+#         if num_faces == 0:
+#             return False, "No faces detected in the image.", None
+#         elif num_faces > 1:
+#             return False, f"{num_faces} faces detected.", None
+#         else:
+#             return True, "One face detected.", faces[0]
+            
+#     except Exception as e:
+#         st.error(f"Error during face verification: {e}")
+#         return False, f"Error during face detection: {str(e)}", None
 def verify_single_face(image):
+    """
+    Verify that the image contains exactly one face using a more robust method.
+    
+    Args:
+        image (numpy.ndarray): Input image to check for faces
+    
+    Returns:
+        tuple: (is_valid, message, face_rect)
+            - is_valid (bool): Whether exactly one face is detected
+            - message (str): Descriptive message about face detection
+            - face_rect (tuple or None): Coordinates of the detected face
+    """
     try:
+        import dlib
+        import cv2
+        import numpy as np
+        
+        # Check if image is valid
         if image is None:
             return False, "No image provided", None
-            
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
-            
-        face_cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-        face_cascade = cv2.CascadeClassifier(face_cascade_path)
         
-        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+        # Convert image to grayscale if it's not already
+        if len(image.shape) == 3:
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = image
         
+        # Initialize face detector (HOG-based detector is more reliable than Haar cascades)
+        detector = dlib.get_frontal_face_detector()
+        
+        # Detect faces
+        faces = detector(gray)
+        
+        # Check number of faces
         num_faces = len(faces)
         
         if num_faces == 0:
             return False, "No faces detected in the image.", None
         elif num_faces > 1:
             return False, f"{num_faces} faces detected.", None
-        else:
-            return True, "One face detected.", faces[0]
+        
+        # Get the first (and only) face
+        face = faces[0]
+        
+        # Convert dlib rectangle to OpenCV-style rectangle
+        face_rect = (
+            face.left(),   # x
+            face.top(),    # y
+            face.width(),  # width
+            face.height()  # height
+        )
+        
+        return True, "One face detected.", face_rect
+    
+    except ImportError:
+        # Fallback to OpenCV Haar cascade if dlib is not available
+        try:
+            # Use more conservative Haar cascade detection
+            face_cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+            profile_cascade_path = cv2.data.haarcascades + 'haarcascade_profileface.xml'
             
-    except Exception as e:
-        st.error(f"Error during face verification: {e}")
-        return False, f"Error during face detection: {str(e)}", None
+            face_cascade = cv2.CascadeClassifier(face_cascade_path)
+            profile_cascade = cv2.CascadeClassifier(profile_cascade_path)
+            
+            # Convert image to grayscale if needed
+            if len(image.shape) == 3:
+                gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            else:
+                gray = image
+            
+            # Equalize histogram to improve detection
+            gray = cv2.equalizeHist(gray)
+            
+            # Detect faces using frontal and profile detectors
+            faces_frontal = face_cascade.detectMultiScale(
+                gray, 
+                scaleFactor=1.1, 
+                minNeighbors=5, 
+                minSize=(30, 30)
+            )
+            faces_profile_left = profile_cascade.detectMultiScale(
+                gray, 
+                scaleFactor=1.1, 
+                minNeighbors=5, 
+                minSize=(30, 30)
+            )
+            faces_profile_right = profile_cascade.detectMultiScale(
+                cv2.flip(gray, 1), 
+                scaleFactor=1.1, 
+                minNeighbors=5, 
+                minSize=(30, 30)
+            )
+            
+            # Combine and remove duplicates
+            all_faces = np.vstack((faces_frontal, faces_profile_left, faces_profile_right))
+            
+            # Remove duplicate detections
+            from scipy.spatial.distance import pdist, squareform
+            if len(all_faces) > 0:
+                distances = pdist(all_faces[:, :2])
+                dist_matrix = squareform(distances)
+                np.fill_diagonal(dist_matrix, np.inf)
+                duplicates = np.unique(np.where(dist_matrix < 30)[0])
+                all_faces = np.delete(all_faces, duplicates, axis=0)
+            
+            num_faces = len(all_faces)
+            
+            if num_faces == 0:
+                return False, "No faces detected in the image.", None
+            elif num_faces > 1:
+                return False, f"{num_faces} faces detected.", None
+            
+            # Get the first (and only) face
+            face = all_faces[0]
+            
+            return True, "One face detected.", tuple(face)
+        
+        except Exception as e:
+            st.error(f"Error during face verification: {e}")
+            return False, f"Error during face detection: {str(e)}", None
 
 def remove_background(input_image):
     try:
