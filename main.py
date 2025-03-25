@@ -256,8 +256,17 @@ def verify_single_face(image):
             minSize=(30, 30)
         )
         
-        # Combine all detected faces
-        all_faces = np.vstack((faces_frontal, faces_profile_left, faces_profile_right))
+        # Combine all detected faces, handling potential empty arrays
+        all_faces = []
+        if len(faces_frontal) > 0:
+            all_faces.extend(faces_frontal)
+        if len(faces_profile_left) > 0:
+            all_faces.extend(faces_profile_left)
+        if len(faces_profile_right) > 0:
+            all_faces.extend(faces_profile_right)
+        
+        # Convert to numpy array
+        all_faces = np.array(all_faces)
         
         # Remove near-duplicate detections
         if len(all_faces) > 0:
