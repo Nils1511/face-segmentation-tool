@@ -78,266 +78,59 @@ def load_bisenet_model():
 #     except Exception as e:
 #         st.error(f"Error during face verification: {e}")
 #         return False, f"Error during face detection: {str(e)}", None
-# def verify_single_face(image):
-#     """
-#     Verify that the image contains exactly one face using a more robust method.
-    
-#     Args:
-#         image (numpy.ndarray): Input image to check for faces
-    
-#     Returns:
-#         tuple: (is_valid, message, face_rect)
-#             - is_valid (bool): Whether exactly one face is detected
-#             - message (str): Descriptive message about face detection
-#             - face_rect (tuple or None): Coordinates of the detected face
-#     """
-#     try:
-#         import dlib
-#         import cv2
-#         import numpy as np
-        
-#         # Check if image is valid
-#         if image is None:
-#             return False, "No image provided", None
-        
-#         # Convert image to grayscale if it's not already
-#         if len(image.shape) == 3:
-#             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-#         else:
-#             gray = image
-        
-#         # Initialize face detector (HOG-based detector is more reliable than Haar cascades)
-#         detector = dlib.get_frontal_face_detector()
-        
-#         # Detect faces
-#         faces = detector(gray)
-        
-#         # Check number of faces
-#         num_faces = len(faces)
-        
-#         if num_faces == 0:
-#             return False, "No faces detected in the image.", None
-#         elif num_faces > 1:
-#             return False, f"{num_faces} faces detected.", None
-        
-#         # Get the first (and only) face
-#         face = faces[0]
-        
-#         # Convert dlib rectangle to OpenCV-style rectangle
-#         face_rect = (
-#             face.left(),   # x
-#             face.top(),    # y
-#             face.width(),  # width
-#             face.height()  # height
-#         )
-        
-#         return True, "One face detected.", face_rect
-    
-#     except ImportError:
-#         # Fallback to OpenCV Haar cascade if dlib is not available
-#         try:
-#             # Use more conservative Haar cascade detection
-#             face_cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-#             profile_cascade_path = cv2.data.haarcascades + 'haarcascade_profileface.xml'
-            
-#             face_cascade = cv2.CascadeClassifier(face_cascade_path)
-#             profile_cascade = cv2.CascadeClassifier(profile_cascade_path)
-            
-#             # Convert image to grayscale if needed
-#             if len(image.shape) == 3:
-#                 gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-#             else:
-#                 gray = image
-            
-#             # Equalize histogram to improve detection
-#             gray = cv2.equalizeHist(gray)
-            
-#             # Detect faces using frontal and profile detectors
-#             faces_frontal = face_cascade.detectMultiScale(
-#                 gray, 
-#                 scaleFactor=1.1, 
-#                 minNeighbors=5, 
-#                 minSize=(30, 30)
-#             )
-#             faces_profile_left = profile_cascade.detectMultiScale(
-#                 gray, 
-#                 scaleFactor=1.1, 
-#                 minNeighbors=5, 
-#                 minSize=(30, 30)
-#             )
-#             faces_profile_right = profile_cascade.detectMultiScale(
-#                 cv2.flip(gray, 1), 
-#                 scaleFactor=1.1, 
-#                 minNeighbors=5, 
-#                 minSize=(30, 30)
-#             )
-            
-#             # Combine and remove duplicates
-#             all_faces = np.vstack((faces_frontal, faces_profile_left, faces_profile_right))
-            
-#             # Remove duplicate detections
-#             from scipy.spatial.distance import pdist, squareform
-#             if len(all_faces) > 0:
-#                 distances = pdist(all_faces[:, :2])
-#                 dist_matrix = squareform(distances)
-#                 np.fill_diagonal(dist_matrix, np.inf)
-#                 duplicates = np.unique(np.where(dist_matrix < 30)[0])
-#                 all_faces = np.delete(all_faces, duplicates, axis=0)
-            
-#             num_faces = len(all_faces)
-            
-#             if num_faces == 0:
-#                 return False, "No faces detected in the image.", None
-#             elif num_faces > 1:
-#                 return False, f"{num_faces} faces detected.", None
-            
-#             # Get the first (and only) face
-#             face = all_faces[0]
-            
-#             return True, "One face detected.", tuple(face)
-        
-#         except Exception as e:
-#             st.error(f"Error during face verification: {e}")
-#             return False, f"Error during face detection: {str(e)}", None
+
 
 def verify_single_face(image):
     """
-    Verify that the image contains exactly one face using OpenCV's face detection.
-    
+    Verify that the image contains exactly one face using Dlib's HOG + Linear SVM
+    face detection.
+
     Args:
-        image (numpy.ndarray): Input image to check for faces
-    
+        image (numpy.ndarray): Input image to check for faces.
+
     Returns:
         tuple: (is_valid, message, face_rect)
             - is_valid (bool): Whether exactly one face is detected
             - message (str): Descriptive message about face detection
             - face_rect (tuple or None): Coordinates of the detected face
+              (x, y, width, height) or None
     """
     try:
-        import cv2
-        import numpy as np
-        
-        # Check if image is valid
         if image is None:
             return False, "No image provided", None
-        
-        # Convert image to grayscale if it's not already
-        if len(image.shape) == 3:
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        else:
-            gray = image
-        
-        # Load pre-trained face detection classifier
-        face_cascade_frontal = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-        face_cascade_profile = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_profileface.xml')
-        
-        # Detect frontal faces
-        faces_frontal = face_cascade_frontal.detectMultiScale(
-            gray, 
-            scaleFactor=1.1, 
-            minNeighbors=5, 
-            minSize=(30, 30)
-        )
-        
-        # Detect profile faces (both left and right)
-        faces_profile_left = face_cascade_profile.detectMultiScale(
-            gray, 
-            scaleFactor=1.1, 
-            minNeighbors=5, 
-            minSize=(30, 30)
-        )
-        
-        # Detect profile faces on flipped image (to catch other profile)
-        gray_flipped = cv2.flip(gray, 1)
-        faces_profile_right = face_cascade_profile.detectMultiScale(
-            gray_flipped, 
-            scaleFactor=1.1, 
-            minNeighbors=5, 
-            minSize=(30, 30)
-        )
-        
-        # Combine all detected faces, handling potential empty arrays
-        all_faces = []
-        if len(faces_frontal) > 0:
-            all_faces.extend(faces_frontal)
-        if len(faces_profile_left) > 0:
-            all_faces.extend(faces_profile_left)
-        if len(faces_profile_right) > 0:
-            all_faces.extend(faces_profile_right)
-        
-        # Convert to numpy array
-        all_faces = np.array(all_faces)
-        
-        # Remove near-duplicate detections
-        if len(all_faces) > 0:
-            # Sort faces by detection confidence (area)
-            sorted_faces = sorted(all_faces, key=lambda x: x[2] * x[3], reverse=True)
-            
-            # Remove overlapping detections
-            unique_faces = []
-            for face in sorted_faces:
-                # Check if this face overlaps significantly with any existing faces
-                is_duplicate = False
-                for existing in unique_faces:
-                    overlap = compute_iou(face, existing)
-                    if overlap > 0.05:  # 30% overlap threshold
-                        is_duplicate = True
-                        break
-                
-                if not is_duplicate:
-                    unique_faces.append(face)
-            
-            # Update all_faces with unique detections
-            all_faces = np.array(unique_faces)
-        
-        # Determine number of detected faces
-        num_faces = len(all_faces)
-        
+
+        # Initialize dlib's face detector using the default HOG + SVM model
+        detector = dlib.get_frontal_face_detector()
+
+        # Convert the image to grayscale, as HOG works on grayscale images
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+        # Detect faces in the grayscale image
+        # The '1' here is the upsample factor.  Larger values (e.g., 2, 3, or 4) can
+        # help detect smaller faces but increase computation time.  You can
+        # experiment with this value.
+        faces = detector(gray, 1)
+
+        num_faces = len(faces)
+
         if num_faces == 0:
             return False, "No faces detected in the image.", None
         elif num_faces > 1:
             return False, f"{num_faces} faces detected.", None
-        
-        # Get the first (and only) face
-        face = all_faces[0]
-        
-        return True, "One face detected.", tuple(face)
-    
-    except Exception as e:
-        st.error(f"Error during face verification: {e}")
-        return False, f"Error during face detection: {str(e)}", None
 
-def compute_iou(box1, box2):
-    """
-    Compute Intersection over Union (IoU) between two bounding boxes.
-    
-    Args:
-        box1 (array-like): First bounding box [x, y, w, h]
-        box2 (array-like): Second bounding box [x, y, w, h]
-    
-    Returns:
-        float: Intersection over Union
-    """
-    # Compute coordinates of intersection rectangle
-    x1 = max(box1[0], box2[0])
-    y1 = max(box1[1], box2[1])
-    x2 = min(box1[0] + box1[2], box2[0] + box2[2])
-    y2 = min(box1[1] + box1[3], box2[1] + box2[3])
-    
-    # Compute area of intersection
-    inter_area = max(0, x2 - x1) * max(0, y2 - y1)
-    
-    # Compute area of both boxes
-    box1_area = box1[2] * box1[3]
-    box2_area = box2[2] * box2[3]
-    
-    # Compute union area
-    union_area = box1_area + box2_area - inter_area
-    
-    # Compute IoU
-    iou = inter_area / union_area if union_area > 0 else 0
-    
-    return iou
+        # Get the first (and only) face
+        face = faces[0]
+        # Convert the dlib rectangle to a (x, y, width, height) tuple
+        x = face.left()
+        y = face.top()
+        width = face.right() - x
+        height = face.bottom() - y
+        face_rect = (x, y, width, height)
+
+        return True, "One face detected.", face_rect
+
+    except Exception as e:
+        return False, f"Error during face detection: {str(e)}", None
 
 def remove_background(input_image):
     try:
