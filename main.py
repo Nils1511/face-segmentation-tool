@@ -90,6 +90,7 @@ def remove_background(input_image):
         alpha = cv2.erode(alpha, kernel, iterations=1)
         alpha = cv2.GaussianBlur(alpha, (3, 3), 0)
         output_array[:, :, 3] = alpha
+        output_array = ouput_array(cv2.cvtColor(output_array, cv2.COLOR_RGBA2BGRA))
         return output_array
     except Exception as e:
         st.error(f"Error removing background: {e}")
