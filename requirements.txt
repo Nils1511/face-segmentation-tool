@@ -1,3 +1,4 @@
+dlib  
 torch
 torchvision 
 opencv-python-headless 
